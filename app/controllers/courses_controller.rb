@@ -1,10 +1,32 @@
 class CoursesController < ApplicationController
+  require 'csv'
   before_action :set_course, only: [:show, :edit, :update, :destroy]
+  def more
+    @courses = CourseStudent.where(course_id: params[:id])
+    @num_a = @courses.where(grade: 'A').count
+    @num_b = @courses.where(grade: 'B').count
+    @num_c = @courses.where(grade: 'C').count
+    @num_d = @courses.where(grade: 'D').count
+    @num_f = @courses.where(grade: 'F').count
+    @num_w = @courses.where(grade: 'W').count
+    @passed = @num_a + @num_b + @num_c
+    @faile = @num_d + @num_f
+  end
+  def stat
+    @courses = Course.all
+    @num_courses = @courses.count
+    @num_intr = Course.all.group_by(&:instructor_id)
+  end
 
   # GET /courses
   # GET /courses.json
   def index
-    @courses = Course.all
+    @courses = Course.all.paginate(:page => params[:page])
+    if params[:search]
+      @courses = Course.search(params[:search]).order("created_at DESC")
+    else
+      @courses = Course.all.order("created_at DESC")
+    end
   end
 
   # GET /courses/1
@@ -58,6 +80,45 @@ class CoursesController < ApplicationController
     respond_to do |format|
       format.html { redirect_to courses_url, notice: 'Course was successfully destroyed.' }
       format.json { head :no_content }
+    end
+  end
+
+  def import
+
+  end
+
+  def to_db
+    course = Course.new()
+    added_rows = 0
+    rows=0
+    CSV.foreach(params[:file].path, :headers => true) do |row|
+      data = row.to_hash
+      instr = Instructor.find_by(name: data['Instructor'])
+      if instr.blank?
+        instr_id = (Instructor.create(:name => data['Instructor'])).id
+      else
+        instr_id = instr.id
+      end
+      #byebug
+      course = Course.new(
+                         :term => (data['Term']).to_i,
+                         :rubric => data['Prefix'],
+                         :course_number => (data['Number']).to_i,
+                         :section => data['Sect'],
+                         :credit_hours => (data['Credit']).to_i,
+                         :day => data['Days'],
+                         :time => data['Start'],
+                         :instructor => data['Instructor'],
+                         :course_type => data['Type'],
+                         :instructor_id => instr_id.to_i
+      )
+      if course.save
+        added_rows = added_rows + 1
+      end
+      rows = rows + 1
+    end
+    if added_rows == rows
+      redirect_to courses_path
     end
   end
 
